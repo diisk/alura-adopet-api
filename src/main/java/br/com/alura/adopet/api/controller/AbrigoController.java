@@ -1,10 +1,14 @@
 package br.com.alura.adopet.api.controller;
 
-import br.com.alura.adopet.api.model.Abrigo;
-import br.com.alura.adopet.api.model.Pet;
-import br.com.alura.adopet.api.repository.AbrigoRepository;
-import jakarta.persistence.EntityNotFoundException;
+import br.com.alura.adopet.api.dto.CadastrarAbrigoDto;
+import br.com.alura.adopet.api.dto.CadastrarPetDto;
+import br.com.alura.adopet.api.dto.DetalheAbrigoDto;
+import br.com.alura.adopet.api.dto.DetalhePetDto;
+import br.com.alura.adopet.api.exception.ValidacaoException;
+import br.com.alura.adopet.api.service.AbrigoService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,70 +21,48 @@ import java.util.List;
 public class AbrigoController {
 
     @Autowired
-    private AbrigoRepository repository;
+    private AbrigoService abrigoService;
 
     @GetMapping
-    public ResponseEntity<List<Abrigo>> listar() {
-        return ResponseEntity.ok(repository.findAll());
+    public ResponseEntity<List<DetalheAbrigoDto>> listar() {
+        return ResponseEntity.ok(
+                abrigoService.listar()
+                        .stream().map(DetalheAbrigoDto::new)
+                        .toList());
     }
 
     @PostMapping
     @Transactional
-    public ResponseEntity<String> cadastrar(@RequestBody @Valid Abrigo abrigo) {
-        boolean nomeJaCadastrado = repository.existsByNome(abrigo.getNome());
-        boolean telefoneJaCadastrado = repository.existsByTelefone(abrigo.getTelefone());
-        boolean emailJaCadastrado = repository.existsByEmail(abrigo.getEmail());
-
-        if (nomeJaCadastrado || telefoneJaCadastrado || emailJaCadastrado) {
-            return ResponseEntity.badRequest().body("Dados já cadastrados para outro abrigo!");
-        } else {
-            repository.save(abrigo);
-            return ResponseEntity.ok().build();
-        }
-    }
-
-    @GetMapping("/{idOuNome}/pets")
-    public ResponseEntity<List<Pet>> listarPets(@PathVariable String idOuNome) {
+    public ResponseEntity<String> cadastrar(@RequestBody @Valid CadastrarAbrigoDto abrigo) {
         try {
-            Long id = Long.parseLong(idOuNome);
-            List<Pet> pets = repository.getReferenceById(id).getPets();
-            return ResponseEntity.ok(pets);
-        } catch (EntityNotFoundException enfe) {
-            return ResponseEntity.notFound().build();
-        } catch (NumberFormatException e) {
-            try {
-                List<Pet> pets = repository.findByNome(idOuNome).getPets();
-                return ResponseEntity.ok(pets);
-            } catch (EntityNotFoundException enfe) {
-                return ResponseEntity.notFound().build();
-            }
+            abrigoService.cadastrar(abrigo);
+            return ResponseEntity.ok("Abrigo cadastrado com sucesso.");
+        } catch (ValidacaoException ex) {
+            return ResponseEntity.badRequest().body(ex.getMessage());
         }
     }
 
-    @PostMapping("/{idOuNome}/pets")
+    @GetMapping("/{idOuNomeAbrigo}/pets")
+    public ResponseEntity<List<DetalhePetDto>> listarPets(@PathVariable @NotBlank String idOuNomeAbrigo) {
+        try {
+            return ResponseEntity.ok(
+                    abrigoService.listarPets(idOuNomeAbrigo)
+                            .stream().map(DetalhePetDto::new)
+                            .toList());
+        } catch (ValidacaoException ex) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping("/{idOuNomeAbrigo}/pets")
     @Transactional
-    public ResponseEntity<String> cadastrarPet(@PathVariable String idOuNome, @RequestBody @Valid Pet pet) {
+    public ResponseEntity<String> cadastrarPet(@PathVariable String idOuNomeAbrigo,
+            @RequestBody @Valid CadastrarPetDto dto) {
         try {
-            Long id = Long.parseLong(idOuNome);
-            Abrigo abrigo = repository.getReferenceById(id);
-            pet.setAbrigo(abrigo);
-            pet.setAdotado(false);
-            abrigo.getPets().add(pet);
-            repository.save(abrigo);
-            return ResponseEntity.ok().build();
-        } catch (EntityNotFoundException enfe) {
+            abrigoService.cadastrarPet(idOuNomeAbrigo, dto);
+            return ResponseEntity.ok("Pet cadastrado com sucesso.");
+        } catch (ValidacaoException ex) {
             return ResponseEntity.notFound().build();
-        } catch (NumberFormatException nfe) {
-            try {
-                Abrigo abrigo = repository.findByNome(idOuNome);
-                pet.setAbrigo(abrigo);
-                pet.setAdotado(false);
-                abrigo.getPets().add(pet);
-                repository.save(abrigo);
-                return ResponseEntity.ok().build();
-            } catch (EntityNotFoundException enfe) {
-                return ResponseEntity.notFound().build();
-            }
         }
     }
 
